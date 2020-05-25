@@ -20,12 +20,6 @@ RUN set -e -x && \
         libssl-dev && \
     curl -L $SOURCE_OPENSSL$VERSION_OPENSSL.tar.gz -o openssl.tar.gz && \
     echo "${SHA256_OPENSSL} ./openssl.tar.gz" | sha256sum -c - && \
-    curl -L $SOURCE_OPENSSL$VERSION_OPENSSL.tar.gz.asc -o openssl.tar.gz.asc && \
-    GNUPGHOME="$(mktemp -d)" && \
-    export GNUPGHOME && \
-    ( gpg --no-tty --keyserver ipv4.pool.sks-keyservers.net --recv-keys "${OPGP_OPENSSL}" \
-    || gpg --no-tty --keyserver ha.pool.sks-keyservers.net --recv-keys "${OPGP_OPENSSL}" ) && \
-    gpg --batch --verify openssl.tar.gz.asc openssl.tar.gz && \
     tar xzf openssl.tar.gz && \
     cd "${VERSION_OPENSSL}" && \
     ./config \
@@ -42,8 +36,7 @@ RUN set -e -x && \
     make depend && \
     make && \
     make install_sw && \
-    apt-get purge -y --auto-remove \
-      $build_deps && \
+    apt-get purge -y --auto-remove $build_deps && \
     rm -rf \
         /tmp/* \
         /var/tmp/* \
@@ -88,11 +81,11 @@ RUN set -e -x && \
     make && \
     make install
 
+
 FROM debian:buster
 
 COPY --from=openssl /opt/openssl /opt/openssl
 COPY --from=stubby /opt/stubby /opt/stubby
-COPY stubby.yml /opt/stubby/etc/stubby/stubby.yml
 
 ENV PATH /opt/stubby/bin:$PATH
 
@@ -109,12 +102,18 @@ RUN set -e -x && \
       /var/tmp/* \
       /var/lib/apt/lists/*
 
+COPY stubby.yml /etc/stubby.yml
+
 WORKDIR /opt/stubby
 
+EXPOSE 8053/tcp
 EXPOSE 8053/udp
 
 USER stubby:stubby
 
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s CMD drill @127.0.0.1 -p 8053 cloudflare.com || exit 1
 
-CMD ["/opt/stubby/bin/stubby", "-C", "/opt/stubby/etc/stubby/stubby.yml"]
+STOPSIGNAL SIGKILL
+
+ENTRYPOINT ["/opt/stubby/bin/stubby"]
+CMD ["-C", "/etc/stubby.yml"]
